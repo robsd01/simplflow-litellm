@@ -72,7 +72,5 @@ RUN chmod +x docker/prod_entrypoint.sh
 
 EXPOSE 4000/tcp
 
-ENTRYPOINT ["docker/prod_entrypoint.sh"]
+CMD ["litellm", "--proxy-server", "--port", "4000"]
 
-# Append "--detailed_debug" to the end of CMD to view detailed debug logs
-CMD ["--port", "4000"]
