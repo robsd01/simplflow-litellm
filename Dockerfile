@@ -3,76 +3,61 @@ ARG LITELLM_BUILD_IMAGE=cgr.dev/chainguard/python:latest-dev
 
 # Runtime image
 ARG LITELLM_RUNTIME_IMAGE=cgr.dev/chainguard/python:latest-dev
+
 # Builder stage
 FROM $LITELLM_BUILD_IMAGE AS builder
 
-# Set the working directory to /app
 WORKDIR /app
-
 USER root
 
 # Install build dependencies
 RUN apk add --no-cache gcc python3-dev openssl openssl-dev
 
+RUN pip install --upgrade pip && pip install build
 
-RUN pip install --upgrade pip && \
-    pip install build
-
-# Copy the current directory contents into the container at /app
+# Copy the project into the container
 COPY . .
 
 # Build Admin UI
 RUN chmod +x docker/build_admin_ui.sh && ./docker/build_admin_ui.sh
 
-# Build the package
+# Build the Python package
 RUN rm -rf dist/* && python -m build
 
-# There should be only one wheel file now, assume the build only creates one
-RUN ls -1 dist/*.whl | head -1
-
-# Install the package
+# Install the built wheel
 RUN pip install dist/*.whl
 
-# install dependencies as wheels
+# Preinstall dependencies as wheels
 RUN pip wheel --no-cache-dir --wheel-dir=/wheels/ -r requirements.txt
 
-# ensure pyjwt is used, not jwt
-RUN pip uninstall jwt -y
-RUN pip uninstall PyJWT -y
-RUN pip install PyJWT==2.9.0 --no-cache-dir
-
-# Build Admin UI
-RUN chmod +x docker/build_admin_ui.sh && ./docker/build_admin_ui.sh
+# Ensure correct JWT library
+RUN pip uninstall jwt -y && pip uninstall PyJWT -y && pip install PyJWT==2.9.0 --no-cache-dir
 
 # Runtime stage
 FROM $LITELLM_RUNTIME_IMAGE AS runtime
 
-# Ensure runtime stage runs as root
 USER root
+WORKDIR /app
 
-# Install runtime dependencies
+# Install runtime system deps
 RUN apk add --no-cache openssl tzdata
 
-WORKDIR /app
-# Copy the current directory contents into the container at /app
+# Copy code and wheels from builder
 COPY . .
-RUN ls -la /app
-
-# Copy the built wheel from the builder stage to the runtime stage; assumes only one wheel file is present
 COPY --from=builder /app/dist/*.whl .
 COPY --from=builder /wheels/ /wheels/
 
-# Install the built wheel using pip; again using a wildcard if it's the only file
+# Install the built wheel and all dependencies
 RUN pip install *.whl /wheels/* --no-index --find-links=/wheels/ && rm -f *.whl && rm -rf /wheels
 
-# Generate prisma client
+# Generate Prisma client
 RUN prisma generate
-RUN chmod +x docker/entrypoint.sh
-RUN chmod +x docker/prod_entrypoint.sh
 
-EXPOSE 4000/tcp
-
+# Output config for debug (optional — safe to remove)
 RUN cat /app/litellm_config.yaml
 
-CMD ["litellm", "--proxy-server", "--port", "4000"]
+# Ensure old ENTRYPOINT is cleared
+ENTRYPOINT []
 
+# Start LiteLLM Proxy Server
+CMD ["litellm", "--proxy-server", "--port", "4000"]
