@@ -1,42 +1,17 @@
-# Base image for building
-ARG LITELLM_BUILD_IMAGE=cgr.dev/chainguard/python:latest-dev
-ARG LITELLM_RUNTIME_IMAGE=cgr.dev/chainguard/python:latest-dev
-
-FROM $LITELLM_BUILD_IMAGE AS builder
+FROM python:3.11-slim
 
 WORKDIR /app
-USER root
 
-RUN apk add --no-cache gcc python3-dev openssl openssl-dev
-RUN pip install --upgrade pip && pip install build
+COPY requirements.txt .
+RUN pip install -r requirements.txt
 
 COPY . .
 
-RUN chmod +x docker/build_admin_ui.sh && ./docker/build_admin_ui.sh
-RUN rm -rf dist/* && python -m build
-RUN pip install dist/*.whl
-RUN pip wheel --no-cache-dir --wheel-dir=/wheels/ -r requirements.txt
-RUN pip uninstall jwt -y && pip uninstall PyJWT -y && pip install PyJWT==2.9.0 --no-cache-dir
+# DEBUG: confirm config is there
+RUN cat litellm_config.yaml
 
-FROM $LITELLM_RUNTIME_IMAGE AS runtime
-
-USER root
-WORKDIR /app
-
-RUN apk add --no-cache openssl tzdata
-COPY . .
-COPY --from=builder /app/dist/*.whl .
-COPY --from=builder /wheels/ /wheels/
-
-RUN pip install *.whl /wheels/* --no-index --find-links=/wheels/ && rm -f *.whl && rm -rf /wheels
-
-RUN prisma generate
-
-# ✅ DEBUG: Show your config file in logs (optional)
-RUN cat /app/litellm_config.yaml
-
-# ✅ CRUCIAL: Clear old ENTRYPOINT to avoid Uvicorn!
+# ✅ Clear old entrypoints
 ENTRYPOINT []
 
-# ✅ Run LiteLLM Proxy Mode
+# ✅ Start LiteLLM proxy server
 CMD ["litellm", "--proxy-server", "--port", "4000"]
