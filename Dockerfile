@@ -72,5 +72,7 @@ RUN chmod +x docker/prod_entrypoint.sh
 
 EXPOSE 4000/tcp
 
+RUN cat /app/litellm_config.yaml
+
 CMD ["litellm", "--proxy-server", "--port", "4000"]
 
