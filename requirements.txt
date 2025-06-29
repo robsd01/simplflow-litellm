@@ -1,2 +1,3 @@
-litellm[proxy]
-openai
+litellm[proxy]==1.44.22
+uvicorn[standard]
+fastapi
